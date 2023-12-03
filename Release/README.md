@@ -1,4 +1,4 @@
-﻿## Disclaimer
+## Disclaimer
 
 - This mod is experimental. It alters core game mechanisms, affects game data and has a short-term impact on saves. It may not be compatible with other mods. Please use at your own risk.
 - This mod can be quite balance-breaking if not properly configurated.
