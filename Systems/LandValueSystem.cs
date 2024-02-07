@@ -39,6 +39,11 @@ namespace RentControl.Systems
             enable_LandValueCap = Plugin.enable_LandValueCap.Value;
             m_LandValueCap = (float)Plugin.m_LandValueCap.Value / 240;
             m_LandValueCap = m_LandValueCap > 0 ? m_LandValueCap : 0;
+            this.m_GroundPollutionSystem = base.World.GetOrCreateSystemManaged<GroundPollutionSystem>();
+            this.m_PollutionParameterQuery = base.GetEntityQuery(new ComponentType[]
+            {
+                ComponentType.ReadOnly<PollutionParameterData>()
+            });
             this.m_EdgeGroup = base.GetEntityQuery(new EntityQueryDesc[]
             {
                 new EntityQueryDesc
@@ -104,6 +109,7 @@ namespace RentControl.Systems
                 this.__TypeHandle.__Game_Buildings_PropertyRenter_RO_ComponentLookup.Update(ref base.CheckedStateRef);
                 this.__TypeHandle.__Game_Prefabs_PrefabRef_RO_ComponentLookup.Update(ref base.CheckedStateRef);
                 this.__TypeHandle.__Game_Net_LandValue_RW_ComponentLookup.Update(ref base.CheckedStateRef);
+                this.__TypeHandle.__Game_Objects_Transform_RO_ComponentLookup.Update(ref base.CheckedStateRef);
                 this.__TypeHandle.__Game_Prefabs_BuildingData_RO_ComponentLookup.Update(ref base.CheckedStateRef);
                 this.__TypeHandle.__Game_Buildings_ConnectedBuilding_RO_BufferTypeHandle.Update(ref base.CheckedStateRef);
                 this.__TypeHandle.__Game_Net_Curve_RO_ComponentTypeHandle.Update(ref base.CheckedStateRef);
@@ -115,6 +121,7 @@ namespace RentControl.Systems
                 jobData.m_CurveType = this.__TypeHandle.__Game_Net_Curve_RO_ComponentTypeHandle;
                 jobData.m_ConnectedBuildingType = this.__TypeHandle.__Game_Buildings_ConnectedBuilding_RO_BufferTypeHandle;
                 jobData.m_BuildingDatas = this.__TypeHandle.__Game_Prefabs_BuildingData_RO_ComponentLookup;
+                jobData.m_Transforms = this.__TypeHandle.__Game_Objects_Transform_RO_ComponentLookup;
                 jobData.m_LandValues = this.__TypeHandle.__Game_Net_LandValue_RW_ComponentLookup;
                 jobData.m_Prefabs = this.__TypeHandle.__Game_Prefabs_PrefabRef_RO_ComponentLookup;
                 jobData.m_PropertyRenters = this.__TypeHandle.__Game_Buildings_PropertyRenter_RO_ComponentLookup;
@@ -129,7 +136,11 @@ namespace RentControl.Systems
                 jobData.m_SubAreas = this.__TypeHandle.__Game_Areas_SubArea_RO_BufferLookup;
                 jobData.m_Lots = this.__TypeHandle.__Game_Areas_Lot_RO_ComponentLookup;
                 jobData.m_Geometries = this.__TypeHandle.__Game_Areas_Geometry_RO_ComponentLookup;
-                jobHandle = jobData.ScheduleParallel(this.m_EdgeGroup, base.Dependency);
+                JobHandle job;
+                jobData.m_PollutionMap = this.m_GroundPollutionSystem.GetMap(true, out job);
+                jobData.m_PollutionParameters = this.m_PollutionParameterQuery.GetSingleton<PollutionParameterData>();
+                jobHandle = jobData.ScheduleParallel(this.m_EdgeGroup, JobHandle.CombineDependencies(base.Dependency, job));
+                this.m_GroundPollutionSystem.AddReader(jobHandle);
             }
             if (!this.m_NodeGroup.IsEmptyIgnoreFilter)
             {
@@ -175,11 +186,14 @@ namespace RentControl.Systems
         {
         }
 
+        private GroundPollutionSystem m_GroundPollutionSystem;
         // Token: 0x04008FF7 RID: 36855
         private EntityQuery m_EdgeGroup;
 
         // Token: 0x04008FF8 RID: 36856
         private EntityQuery m_NodeGroup;
+
+        private EntityQuery m_PollutionParameterQuery;
 
         private static float m_LandValueCap;
         private static bool enable_LandValueCap;
@@ -207,6 +221,7 @@ namespace RentControl.Systems
                     int num = 0;
                     float num2 = 0f;
                     int num3 = 0;
+                    float pollution_factor = 0f;
                     DynamicBuffer<ConnectedBuilding> dynamicBuffer = bufferAccessor[i];
                     for (int j = 0; j < dynamicBuffer.Length; j++)
                     {
@@ -260,6 +275,10 @@ namespace RentControl.Systems
                                         num2 -= (float)num8;
                                         num3 += num8;
                                     }
+                                    if (this.m_Transforms.HasComponent(building))
+                                    {
+                                        pollution_factor = (float)GroundPollutionSystem.GetPollution(this.m_Transforms[building].m_Position, this.m_PollutionMap).m_Pollution / (float)this.m_PollutionParameters.m_GroundPollutionLandValueDivisor;
+                                    }
                                 }
                             }
                         }
@@ -283,9 +302,17 @@ namespace RentControl.Systems
                     {
                         y2 = 0.1f * num2 / (float)num3;
                     }
+                    if (pollution_factor > 0f)
+                    {
+                        pollution_factor = math.lerp(0f, 2f, pollution_factor / 50f);
+                    }
                     landValue.m_Weight = math.max(1f, math.lerp(landValue.m_Weight, (float)num, 0.1f));
                     float s = num10 / (99f * landValue.m_Weight + num10);
                     landValue.m_LandValue = math.lerp(landValue.m_LandValue, y, s);
+                    if (landValue.m_LandValue > 30f)
+                    {
+                        y2 -= pollution_factor * 0.2f;
+                    }
                     landValue.m_LandValue += math.min(1f, math.max(-1f, y2));
                     landValue.m_LandValue = math.max(landValue.m_LandValue, 0f);
                     if (enable_LandValueCap)
@@ -326,6 +353,9 @@ namespace RentControl.Systems
             // Token: 0x04008FFF RID: 36863
             [ReadOnly]
             public BufferLookup<Renter> m_RenterBuffers;
+
+            [ReadOnly]
+            public ComponentLookup<Game.Objects.Transform> m_Transforms;
 
             // Token: 0x04009000 RID: 36864
             [ReadOnly]
@@ -378,6 +408,13 @@ namespace RentControl.Systems
             // Token: 0x0400900C RID: 36876
             [ReadOnly]
             public ComponentLookup<Geometry> m_Geometries;
+
+            [ReadOnly]
+            public NativeArray<GroundPollution> m_PollutionMap;
+
+            // Token: 0x0400910D RID: 37133
+            [ReadOnly]
+            public PollutionParameterData m_PollutionParameters;
         }
 
         // Token: 0x0200133A RID: 4922
@@ -468,6 +505,7 @@ namespace RentControl.Systems
                 this.__Game_Net_Curve_RO_ComponentTypeHandle = state.GetComponentTypeHandle<Curve>(true);
                 this.__Game_Buildings_ConnectedBuilding_RO_BufferTypeHandle = state.GetBufferTypeHandle<ConnectedBuilding>(true);
                 this.__Game_Prefabs_BuildingData_RO_ComponentLookup = state.GetComponentLookup<BuildingData>(true);
+                this.__Game_Objects_Transform_RO_ComponentLookup = state.GetComponentLookup<Game.Objects.Transform>(true);
                 this.__Game_Net_LandValue_RW_ComponentLookup = state.GetComponentLookup<LandValue>(false);
                 this.__Game_Prefabs_PrefabRef_RO_ComponentLookup = state.GetComponentLookup<PrefabRef>(true);
                 this.__Game_Buildings_PropertyRenter_RO_ComponentLookup = state.GetComponentLookup<PropertyRenter>(true);
@@ -506,6 +544,9 @@ namespace RentControl.Systems
             // Token: 0x04009016 RID: 36886
             [ReadOnly]
             public ComponentLookup<BuildingData> __Game_Prefabs_BuildingData_RO_ComponentLookup;
+
+            [ReadOnly]
+            public ComponentLookup<Game.Objects.Transform> __Game_Objects_Transform_RO_ComponentLookup;
 
             // Token: 0x04009017 RID: 36887
             public ComponentLookup<LandValue> __Game_Net_LandValue_RW_ComponentLookup;

@@ -50,10 +50,11 @@ namespace RentControl.Systems
             GarbageFeeFactor = GarbageFeeFactor > 0 ? GarbageFeeFactor : 0;
             GarbageFeeFactor = GarbageFeeFactor < 100 ? GarbageFeeFactor : 100;
             this.m_EndFrameBarrier = base.World.GetOrCreateSystemManaged<EndFrameBarrier>();
-            this.m_PathfindSetupSystem = base.World.GetOrCreateSystemManaged<PathfindSetupSystem>();
-            this.m_IconCommandSystem = base.World.GetOrCreateSystemManaged<IconCommandSystem>();
-            this.m_ServiceFeeSystem = base.World.GetOrCreateSystemManaged<ServiceFeeSystem>();
-            this.m_SimulationSystem = base.World.GetOrCreateSystemManaged<SimulationSystem>();
+			this.m_PathfindSetupSystem = base.World.GetOrCreateSystemManaged<PathfindSetupSystem>();
+			this.m_IconCommandSystem = base.World.GetOrCreateSystemManaged<IconCommandSystem>();
+			this.m_ServiceFeeSystem = base.World.GetOrCreateSystemManaged<ServiceFeeSystem>();
+			this.m_SimulationSystem = base.World.GetOrCreateSystemManaged<SimulationSystem>();
+			this.m_CityStatisticsSystem = base.World.GetOrCreateSystemManaged<CityStatisticsSystem>();
             this.m_VehicleQuery = base.GetEntityQuery(new ComponentType[]
             {
                 ComponentType.ReadWrite<CarCurrentLane>(),
@@ -182,6 +183,8 @@ namespace RentControl.Systems
             garbageActionJob.m_ActionQueue = actionQueue;
             JobHandle job;
             garbageActionJob.m_FeeQueue = this.m_ServiceFeeSystem.GetFeeQueue(out job);
+            JobHandle job2;
+            garbageActionJob.m_StatisticsEventQueue = this.m_CityStatisticsSystem.GetStatisticsEventQueue(out job2).AsParallelWriter();
             garbageActionJob.m_IconCommandBuffer = this.m_IconCommandSystem.CreateCommandBuffer();
             garbageActionJob.m_CommandBuffer = this.m_EndFrameBarrier.CreateCommandBuffer();
             CustomGarbageTruckAISystem.GarbageActionJob jobData2 = garbageActionJob;
@@ -192,6 +195,7 @@ namespace RentControl.Systems
             this.m_EndFrameBarrier.AddJobHandleForProducer(jobHandle2);
             this.m_IconCommandSystem.AddCommandBufferWriter(jobHandle2);
             this.m_ServiceFeeSystem.AddQueueWriter(jobHandle2);
+            this.m_CityStatisticsSystem.AddWriter(jobHandle2);
             base.Dependency = jobHandle2;
         }
 
@@ -275,6 +279,8 @@ namespace RentControl.Systems
         // Token: 0x0400A7D0 RID: 42960
         private SimulationSystem m_SimulationSystem;
 
+        private CityStatisticsSystem m_CityStatisticsSystem;
+
         // Token: 0x0400A7D1 RID: 42961
         private EntityQuery m_VehicleQuery;
 
@@ -335,7 +341,7 @@ namespace RentControl.Systems
         [BurstCompile]
         private struct GarbageTruckTickJob : IJobChunk
         {
-            // Token: 0x06005E8D RID: 24205 RVA: 0x004168B4 File Offset: 0x00414AB4
+            // Token: 0x06005F9F RID: 24479 RVA: 0x003B5DBC File Offset: 0x003B3FBC
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 NativeArray<Entity> nativeArray = chunk.GetNativeArray(this.m_EntityType);
@@ -373,7 +379,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E8E RID: 24206 RVA: 0x00416A60 File Offset: 0x00414C60
+            // Token: 0x06005FA0 RID: 24480 RVA: 0x003B5F68 File Offset: 0x003B4168
             private void Tick(int jobIndex, Entity vehicleEntity, Owner owner, PrefabRef prefabRef, PathInformation pathInformation, DynamicBuffer<CarNavigationLane> navigationLanes, DynamicBuffer<ServiceDispatch> serviceDispatches, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car car, ref CarCurrentLane currentLane, ref PathOwner pathOwner, ref Target target)
             {
                 if (VehicleUtils.ResetUpdatedPath(ref pathOwner))
@@ -454,7 +460,7 @@ namespace RentControl.Systems
                 this.FindPathIfNeeded(vehicleEntity, prefabRef, ref currentLane, ref pathOwner, ref target);
             }
 
-            // Token: 0x06005E8F RID: 24207 RVA: 0x00416CE8 File Offset: 0x00414EE8
+            // Token: 0x06005FA1 RID: 24481 RVA: 0x003B61F0 File Offset: 0x003B43F0
             private void FindPathIfNeeded(Entity vehicleEntity, PrefabRef prefabRefData, ref CarCurrentLane currentLaneData, ref PathOwner pathOwnerData, ref Target target)
             {
                 if (VehicleUtils.RequireNewPath(pathOwnerData))
@@ -486,7 +492,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E90 RID: 24208 RVA: 0x00416DEC File Offset: 0x00414FEC
+            // Token: 0x06005FA2 RID: 24482 RVA: 0x003B62F4 File Offset: 0x003B44F4
             private void CheckServiceDispatches(Entity vehicleEntity, DynamicBuffer<ServiceDispatch> serviceDispatches, ref Game.Vehicles.GarbageTruck garbageTruck, ref PathOwner pathOwner)
             {
                 if (serviceDispatches.Length > garbageTruck.m_RequestCount)
@@ -553,7 +559,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E91 RID: 24209 RVA: 0x00416FE8 File Offset: 0x004151E8
+            // Token: 0x06005FA3 RID: 24483 RVA: 0x003B64F0 File Offset: 0x003B46F0
             private void PreAddCollectionRequests(Entity request, ref Game.Vehicles.GarbageTruck garbageTruck)
             {
                 if (this.m_PathElements.HasBuffer(request))
@@ -583,7 +589,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E92 RID: 24210 RVA: 0x004170A4 File Offset: 0x004152A4
+            // Token: 0x06005FA4 RID: 24484 RVA: 0x003B65AC File Offset: 0x003B47AC
             private bool HasSidewalk(Entity owner)
             {
                 if (this.m_SubLanes.HasBuffer(owner))
@@ -601,7 +607,7 @@ namespace RentControl.Systems
                 return false;
             }
 
-            // Token: 0x06005E93 RID: 24211 RVA: 0x00417100 File Offset: 0x00415300
+            // Token: 0x06005FA5 RID: 24485 RVA: 0x003B6608 File Offset: 0x003B4808
             private void RequestTargetIfNeeded(int jobIndex, Entity entity, ref Game.Vehicles.GarbageTruck garbageTruck)
             {
                 if (this.m_GarbageCollectionRequestData.HasComponent(garbageTruck.m_TargetRequest))
@@ -618,7 +624,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E94 RID: 24212 RVA: 0x00417198 File Offset: 0x00415398
+            // Token: 0x06005FA6 RID: 24486 RVA: 0x003B66A0 File Offset: 0x003B48A0
             private bool SelectNextDispatch(int jobIndex, Entity vehicleEntity, DynamicBuffer<CarNavigationLane> navigationLanes, DynamicBuffer<ServiceDispatch> serviceDispatches, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car car, ref CarCurrentLane currentLane, ref PathOwner pathOwner, ref Target target)
             {
                 if ((garbageTruck.m_State & GarbageTruckFlags.Returning) == (GarbageTruckFlags)0U && garbageTruck.m_RequestCount > 0 && serviceDispatches.Length > 0)
@@ -704,7 +710,7 @@ namespace RentControl.Systems
                 return false;
             }
 
-            // Token: 0x06005E95 RID: 24213 RVA: 0x004174C4 File Offset: 0x004156C4
+            // Token: 0x06005FA7 RID: 24487 RVA: 0x003B69CC File Offset: 0x003B4BCC
             private void ReturnToDepot(Owner ownerData, DynamicBuffer<ServiceDispatch> serviceDispatches, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car car, ref PathOwner pathOwnerData, ref Target targetData)
             {
                 serviceDispatches.Clear();
@@ -715,7 +721,7 @@ namespace RentControl.Systems
                 VehicleUtils.SetTarget(ref pathOwnerData, ref targetData, ownerData.m_Owner);
             }
 
-            // Token: 0x06005E96 RID: 24214 RVA: 0x00417510 File Offset: 0x00415710
+            // Token: 0x06005FA8 RID: 24488 RVA: 0x003B6A18 File Offset: 0x003B4C18
             private void ResetPath(int jobIndex, Entity vehicleEntity, PathInformation pathInformation, DynamicBuffer<ServiceDispatch> serviceDispatches, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car carData, ref CarCurrentLane currentLane)
             {
                 DynamicBuffer<PathElement> path = this.m_PathElements[vehicleEntity];
@@ -750,7 +756,7 @@ namespace RentControl.Systems
                 garbageTruck.m_PathElementTime = pathInformation.m_Duration / (float)math.max(1, path.Length);
             }
 
-            // Token: 0x06005E97 RID: 24215 RVA: 0x00417644 File Offset: 0x00415844
+            // Token: 0x06005FA9 RID: 24489 RVA: 0x003B6B4C File Offset: 0x003B4D4C
             private int AddPathElement(DynamicBuffer<PathElement> path, PathElement pathElement, Entity request, ref Entity lastOwner, ref Game.Vehicles.GarbageTruck garbageTruck)
             {
                 int result = 0;
@@ -782,7 +788,7 @@ namespace RentControl.Systems
                 return result;
             }
 
-            // Token: 0x06005E98 RID: 24216 RVA: 0x0041771C File Offset: 0x0041591C
+            // Token: 0x06005FAA RID: 24490 RVA: 0x003B6C24 File Offset: 0x003B4E24
             private bool FindClosestSidewalk(Entity lane, Entity owner, ref float curvePos, out Entity sidewalk)
             {
                 bool result = false;
@@ -812,7 +818,7 @@ namespace RentControl.Systems
                 return result;
             }
 
-            // Token: 0x06005E99 RID: 24217 RVA: 0x004177E4 File Offset: 0x004159E4
+            // Token: 0x06005FAB RID: 24491 RVA: 0x003B6CEC File Offset: 0x003B4EEC
             private int AddCollectionRequests(Entity edgeEntity, Entity request, ref Game.Vehicles.GarbageTruck garbageTruck)
             {
                 int num = 0;
@@ -838,7 +844,7 @@ namespace RentControl.Systems
                 return num;
             }
 
-            // Token: 0x06005E9A RID: 24218 RVA: 0x004178A0 File Offset: 0x00415AA0
+            // Token: 0x06005FAC RID: 24492 RVA: 0x003B6DA8 File Offset: 0x003B4FA8
             private void CheckGarbagePresence(ref CarCurrentLane currentLaneData, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car car, DynamicBuffer<CarNavigationLane> navigationLanes)
             {
                 if ((currentLaneData.m_LaneFlags & (Game.Vehicles.CarLaneFlags.Waypoint | Game.Vehicles.CarLaneFlags.Checked)) == Game.Vehicles.CarLaneFlags.Waypoint)
@@ -876,7 +882,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E9B RID: 24219 RVA: 0x004179E0 File Offset: 0x00415BE0
+            // Token: 0x06005FAD RID: 24493 RVA: 0x003B6EE8 File Offset: 0x003B50E8
             private bool CheckGarbagePresence(Entity laneEntity, ref Game.Vehicles.GarbageTruck garbageTruck)
             {
                 if (this.m_EdgeLaneData.HasComponent(laneEntity) && this.m_OwnerData.HasComponent(laneEntity))
@@ -898,7 +904,7 @@ namespace RentControl.Systems
                 return false;
             }
 
-            // Token: 0x06005E9C RID: 24220 RVA: 0x000929CA File Offset: 0x00090BCA
+            // Token: 0x06005FAE RID: 24494 RVA: 0x003B6FB6 File Offset: 0x003B51B6
             private void TryCollectGarbage(int jobIndex, Entity vehicleEntity, GarbageTruckData prefabGarbageTruckData, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car car, ref CarCurrentLane currentLaneData, Entity ignoreBuilding)
             {
                 if (garbageTruck.m_Garbage < prefabGarbageTruckData.m_GarbageCapacity)
@@ -907,7 +913,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E9D RID: 24221 RVA: 0x000929F1 File Offset: 0x00090BF1
+            // Token: 0x06005FAF RID: 24495 RVA: 0x003B6FDD File Offset: 0x003B51DD
             private void TryCollectGarbage(int jobIndex, Entity vehicleEntity, GarbageTruckData prefabGarbageTruckData, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car car, ref Target target)
             {
                 if (garbageTruck.m_Garbage < prefabGarbageTruckData.m_GarbageCapacity)
@@ -916,7 +922,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E9E RID: 24222 RVA: 0x00417AB0 File Offset: 0x00415CB0
+            // Token: 0x06005FB0 RID: 24496 RVA: 0x003B7004 File Offset: 0x003B5204
             private void TryCollectGarbageFromLane(int jobIndex, Entity vehicleEntity, GarbageTruckData prefabGarbageTruckData, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car car, Entity laneEntity, Entity ignoreBuilding)
             {
                 Owner owner;
@@ -934,7 +940,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005E9F RID: 24223 RVA: 0x00417B2C File Offset: 0x00415D2C
+            // Token: 0x06005FB1 RID: 24497 RVA: 0x003B7080 File Offset: 0x003B5280
             private void TryCollectGarbageFromBuilding(int jobIndex, Entity vehicleEntity, GarbageTruckData prefabGarbageTruckData, ref Game.Vehicles.GarbageTruck garbageTruck, ref Car car, Entity buildingEntity)
             {
                 GarbageProducer garbageProducer;
@@ -959,7 +965,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005EA0 RID: 24224 RVA: 0x00417BF0 File Offset: 0x00415DF0
+            // Token: 0x06005FB2 RID: 24498 RVA: 0x003B7144 File Offset: 0x003B5344
             private void QuantityUpdated(int jobIndex, Entity buildingEntity, bool updateAll = false)
             {
                 DynamicBuffer<Game.Objects.SubObject> dynamicBuffer;
@@ -979,7 +985,7 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x06005EA1 RID: 24225 RVA: 0x00417C64 File Offset: 0x00415E64
+            // Token: 0x06005FB3 RID: 24499 RVA: 0x003B71B8 File Offset: 0x003B53B8
             private bool IsIndustrial(Entity prefab)
             {
                 if (this.m_PrefabSpawnableBuildingData.HasComponent(prefab))
@@ -993,7 +999,7 @@ namespace RentControl.Systems
                 return false;
             }
 
-            // Token: 0x06005EA2 RID: 24226 RVA: 0x00417CBC File Offset: 0x00415EBC
+            // Token: 0x06005FB4 RID: 24500 RVA: 0x003B7210 File Offset: 0x003B5410
             private bool UnloadGarbage(int jobIndex, Entity vehicleEntity, GarbageTruckData prefabGarbageTruckData, Entity facilityEntity, ref Game.Vehicles.GarbageTruck garbageTruck, bool instant)
             {
                 if (garbageTruck.m_Garbage > 0 && this.m_GarbageFacilityData.HasComponent(facilityEntity))
@@ -1015,160 +1021,159 @@ namespace RentControl.Systems
                 return true;
             }
 
-            // Token: 0x06005EA3 RID: 24227 RVA: 0x00092A16 File Offset: 0x00090C16
+            // Token: 0x06005FB5 RID: 24501 RVA: 0x003B72BE File Offset: 0x003B54BE
             void IJobChunk.Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 this.Execute(chunk, unfilteredChunkIndex, useEnabledMask, chunkEnabledMask);
             }
 
-            // Token: 0x0400A7E2 RID: 42978
+            // Token: 0x0400A8E3 RID: 43235
             [ReadOnly]
             public EntityTypeHandle m_EntityType;
 
-            // Token: 0x0400A7E3 RID: 42979
+            // Token: 0x0400A8E4 RID: 43236
             [ReadOnly]
             public ComponentTypeHandle<Owner> m_OwnerType;
 
-            // Token: 0x0400A7E4 RID: 42980
+            // Token: 0x0400A8E5 RID: 43237
             [ReadOnly]
             public ComponentTypeHandle<Unspawned> m_UnspawnedType;
 
-            // Token: 0x0400A7E5 RID: 42981
+            // Token: 0x0400A8E6 RID: 43238
             [ReadOnly]
             public ComponentTypeHandle<PrefabRef> m_PrefabRefType;
 
-            // Token: 0x0400A7E6 RID: 42982
+            // Token: 0x0400A8E7 RID: 43239
             [ReadOnly]
             public ComponentTypeHandle<PathInformation> m_PathInformationType;
 
-            // Token: 0x0400A7E7 RID: 42983
+            // Token: 0x0400A8E8 RID: 43240
             public ComponentTypeHandle<Game.Vehicles.GarbageTruck> m_GarbageTruckType;
 
-            // Token: 0x0400A7E8 RID: 42984
+            // Token: 0x0400A8E9 RID: 43241
             public ComponentTypeHandle<Car> m_CarType;
 
-            // Token: 0x0400A7E9 RID: 42985
+            // Token: 0x0400A8EA RID: 43242
             public ComponentTypeHandle<CarCurrentLane> m_CurrentLaneType;
 
-            // Token: 0x0400A7EA RID: 42986
+            // Token: 0x0400A8EB RID: 43243
             public ComponentTypeHandle<Target> m_TargetType;
 
-            // Token: 0x0400A7EB RID: 42987
+            // Token: 0x0400A8EC RID: 43244
             public ComponentTypeHandle<PathOwner> m_PathOwnerType;
 
-            // Token: 0x0400A7EC RID: 42988
+            // Token: 0x0400A8ED RID: 43245
             public BufferTypeHandle<CarNavigationLane> m_CarNavigationLaneType;
 
-            // Token: 0x0400A7ED RID: 42989
+            // Token: 0x0400A8EE RID: 43246
             public BufferTypeHandle<ServiceDispatch> m_ServiceDispatchType;
 
-            // Token: 0x0400A7EE RID: 42990
+            // Token: 0x0400A8EF RID: 43247
             [ReadOnly]
             public ComponentLookup<Owner> m_OwnerData;
 
-            // Token: 0x0400A7EF RID: 42991
+            // Token: 0x0400A8F0 RID: 43248
             [ReadOnly]
             public ComponentLookup<PathInformation> m_PathInformationData;
 
-            // Token: 0x0400A7F0 RID: 42992
+            // Token: 0x0400A8F1 RID: 43249
             [ReadOnly]
             public ComponentLookup<Quantity> m_QuantityData;
 
-            // Token: 0x0400A7F1 RID: 42993
+            // Token: 0x0400A8F2 RID: 43250
             [ReadOnly]
             public ComponentLookup<SlaveLane> m_SlaveLaneData;
 
-            // Token: 0x0400A7F2 RID: 42994
+            // Token: 0x0400A8F3 RID: 43251
             [ReadOnly]
             public ComponentLookup<EdgeLane> m_EdgeLaneData;
 
-            // Token: 0x0400A7F3 RID: 42995
+            // Token: 0x0400A8F4 RID: 43252
             [ReadOnly]
             public ComponentLookup<Game.Net.PedestrianLane> m_PedestrianLaneData;
 
-            // Token: 0x0400A7F4 RID: 42996
+            // Token: 0x0400A8F5 RID: 43253
             [ReadOnly]
             public ComponentLookup<Curve> m_CurveData;
 
-            // Token: 0x0400A7F5 RID: 42997
+            // Token: 0x0400A8F6 RID: 43254
             [ReadOnly]
             public ComponentLookup<CarData> m_PrefabCarData;
 
-            // Token: 0x0400A7F6 RID: 42998
+            // Token: 0x0400A8F7 RID: 43255
             [ReadOnly]
             public ComponentLookup<GarbageTruckData> m_PrefabGarbageTruckData;
 
-            // Token: 0x0400A7F7 RID: 42999
+            // Token: 0x0400A8F8 RID: 43256
             [ReadOnly]
             public ComponentLookup<PrefabRef> m_PrefabRefData;
 
-            // Token: 0x0400A7F8 RID: 43000
+            // Token: 0x0400A8F9 RID: 43257
             [ReadOnly]
             public ComponentLookup<SpawnableBuildingData> m_PrefabSpawnableBuildingData;
 
-            // Token: 0x0400A7F9 RID: 43001
+            // Token: 0x0400A8FA RID: 43258
             [ReadOnly]
             public ComponentLookup<ZoneData> m_PrefabZoneData;
 
-            // Token: 0x0400A7FA RID: 43002
+            // Token: 0x0400A8FB RID: 43259
             [ReadOnly]
             public ComponentLookup<GarbageCollectionRequest> m_GarbageCollectionRequestData;
 
-            // Token: 0x0400A7FB RID: 43003
+            // Token: 0x0400A8FC RID: 43260
             [ReadOnly]
             public ComponentLookup<GarbageProducer> m_GarbageProducerData;
 
-            // Token: 0x0400A7FC RID: 43004
+            // Token: 0x0400A8FD RID: 43261
             [ReadOnly]
             public ComponentLookup<Game.Buildings.GarbageFacility> m_GarbageFacilityData;
 
-            // Token: 0x0400A7FD RID: 43005
+            // Token: 0x0400A8FE RID: 43262
             [ReadOnly]
             public BufferLookup<Game.Objects.SubObject> m_SubObjects;
 
-            // Token: 0x0400A7FE RID: 43006
+            // Token: 0x0400A8FF RID: 43263
             [ReadOnly]
             public BufferLookup<ConnectedBuilding> m_ConnectedBuildings;
 
-            // Token: 0x0400A7FF RID: 43007
+            // Token: 0x0400A900 RID: 43264
             [ReadOnly]
             public BufferLookup<Game.Net.SubLane> m_SubLanes;
 
-            // Token: 0x0400A800 RID: 43008
+            // Token: 0x0400A901 RID: 43265
             [NativeDisableParallelForRestriction]
             public BufferLookup<PathElement> m_PathElements;
 
-            // Token: 0x0400A801 RID: 43009
+            // Token: 0x0400A902 RID: 43266
             [ReadOnly]
             public uint m_SimulationFrameIndex;
 
-            // Token: 0x0400A802 RID: 43010
+            // Token: 0x0400A903 RID: 43267
             [ReadOnly]
             public EntityArchetype m_GarbageCollectionRequestArchetype;
 
-            // Token: 0x0400A803 RID: 43011
+            // Token: 0x0400A904 RID: 43268
             [ReadOnly]
             public EntityArchetype m_HandleRequestArchetype;
 
-            // Token: 0x0400A804 RID: 43012
+            // Token: 0x0400A905 RID: 43269
             [ReadOnly]
             public GarbageParameterData m_GarbageParameters;
 
-            // Token: 0x0400A805 RID: 43013
+            // Token: 0x0400A906 RID: 43270
             public EntityCommandBuffer.ParallelWriter m_CommandBuffer;
 
-            // Token: 0x0400A806 RID: 43014
+            // Token: 0x0400A907 RID: 43271
             public NativeQueue<SetupQueueItem>.ParallelWriter m_PathfindQueue;
 
-            // Token: 0x0400A807 RID: 43015
+            // Token: 0x0400A908 RID: 43272
             public NativeQueue<CustomGarbageTruckAISystem.GarbageAction>.ParallelWriter m_ActionQueue;
         }
 
-        // Token: 0x020015B7 RID: 5559
         [BurstCompile]
         private struct GarbageActionJob : IJob
         {
-            // Token: 0x06005EA4 RID: 24228 RVA: 0x00417D6C File Offset: 0x00415F6C
+            // Token: 0x06005FB6 RID: 24502 RVA: 0x003B72CC File Offset: 0x003B54CC
             public void Execute()
             {
                 CustomGarbageTruckAISystem.GarbageAction garbageAction;
@@ -1208,6 +1213,12 @@ namespace RentControl.Systems
                                         this.m_BuildingConditions[garbageAction.m_Target] = value;
                                         if (this.m_Owners.HasComponent(garbageAction.m_Vehicle) && !this.m_OutsideConnections.HasComponent(this.m_Owners[garbageAction.m_Vehicle].m_Owner))
                                         {
+                                            this.m_StatisticsEventQueue.Enqueue(new StatisticsEvent
+                                            {
+                                                m_Statistic = StatisticType.Income,
+                                                m_Change = (float)num2,
+                                                m_Parameter = 12
+                                            });
                                             this.m_FeeQueue.Enqueue(new ServiceFeeSystem.FeeEvent
                                             {
                                                 m_Amount = (float)num,
@@ -1264,56 +1275,59 @@ namespace RentControl.Systems
                 }
             }
 
-            // Token: 0x0400A808 RID: 43016
+            // Token: 0x0400A909 RID: 43273
             public ComponentLookup<Game.Vehicles.GarbageTruck> m_GarbageTruckData;
 
-            // Token: 0x0400A809 RID: 43017
+            // Token: 0x0400A90A RID: 43274
             public ComponentLookup<GarbageProducer> m_GarbageProducerData;
 
-            // Token: 0x0400A80A RID: 43018
+            // Token: 0x0400A90B RID: 43275
             public BufferLookup<Game.Economy.Resources> m_EconomyResources;
 
-            // Token: 0x0400A80B RID: 43019
+            // Token: 0x0400A90C RID: 43276
             public ComponentLookup<BuildingCondition> m_BuildingConditions;
 
-            // Token: 0x0400A80C RID: 43020
+            // Token: 0x0400A90D RID: 43277
             public BufferLookup<Efficiency> m_Efficiencies;
 
-            // Token: 0x0400A80D RID: 43021
+            // Token: 0x0400A90E RID: 43278
             [ReadOnly]
             public ComponentLookup<Owner> m_Owners;
 
-            // Token: 0x0400A80E RID: 43022
+            // Token: 0x0400A90F RID: 43279
             [ReadOnly]
             public ComponentLookup<Game.Objects.OutsideConnection> m_OutsideConnections;
 
-            // Token: 0x0400A80F RID: 43023
+            // Token: 0x0400A910 RID: 43280
             [ReadOnly]
             public GarbageParameterData m_GarbageParameters;
 
-            // Token: 0x0400A810 RID: 43024
+            // Token: 0x0400A911 RID: 43281
             public float m_GarbageFee;
 
-            // Token: 0x0400A811 RID: 43025
+            // Token: 0x0400A912 RID: 43282
             public float m_GarbageEfficiencyPenalty;
 
-            // Token: 0x0400A812 RID: 43026
+            // Token: 0x0400A913 RID: 43283
             public NativeQueue<CustomGarbageTruckAISystem.GarbageAction> m_ActionQueue;
 
-            // Token: 0x0400A813 RID: 43027
+            // Token: 0x0400A914 RID: 43284
             public NativeQueue<ServiceFeeSystem.FeeEvent> m_FeeQueue;
 
-            // Token: 0x0400A814 RID: 43028
+            // Token: 0x0400A915 RID: 43285
+            public NativeQueue<StatisticsEvent>.ParallelWriter m_StatisticsEventQueue;
+
+            // Token: 0x0400A916 RID: 43286
             public IconCommandBuffer m_IconCommandBuffer;
 
-            // Token: 0x0400A815 RID: 43029
+            // Token: 0x0400A917 RID: 43287
             public EntityCommandBuffer m_CommandBuffer;
         }
 
-        // Token: 0x020015B8 RID: 5560
+        // Token: 0x020015EE RID: 5614
         private struct TypeHandle
         {
-            // Token: 0x06005EA5 RID: 24229 RVA: 0x004180D4 File Offset: 0x004162D4
+            // Token: 0x06005FB7 RID: 24503 RVA: 0x003B7664 File Offset: 0x003B5864
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void __AssignHandles(ref SystemState state)
             {
@@ -1356,138 +1370,138 @@ namespace RentControl.Systems
                 this.__Game_Objects_OutsideConnection_RO_ComponentLookup = state.GetComponentLookup<Game.Objects.OutsideConnection>(true);
             }
 
-            // Token: 0x0400A816 RID: 43030
+            // Token: 0x0400A918 RID: 43288
             [ReadOnly]
             public EntityTypeHandle __Unity_Entities_Entity_TypeHandle;
 
-            // Token: 0x0400A817 RID: 43031
+            // Token: 0x0400A919 RID: 43289
             [ReadOnly]
             public ComponentTypeHandle<Owner> __Game_Common_Owner_RO_ComponentTypeHandle;
 
-            // Token: 0x0400A818 RID: 43032
+            // Token: 0x0400A91A RID: 43290
             [ReadOnly]
             public ComponentTypeHandle<Unspawned> __Game_Objects_Unspawned_RO_ComponentTypeHandle;
 
-            // Token: 0x0400A819 RID: 43033
+            // Token: 0x0400A91B RID: 43291
             [ReadOnly]
             public ComponentTypeHandle<PrefabRef> __Game_Prefabs_PrefabRef_RO_ComponentTypeHandle;
 
-            // Token: 0x0400A81A RID: 43034
+            // Token: 0x0400A91C RID: 43292
             [ReadOnly]
             public ComponentTypeHandle<PathInformation> __Game_Pathfind_PathInformation_RO_ComponentTypeHandle;
 
-            // Token: 0x0400A81B RID: 43035
+            // Token: 0x0400A91D RID: 43293
             public ComponentTypeHandle<Game.Vehicles.GarbageTruck> __Game_Vehicles_GarbageTruck_RW_ComponentTypeHandle;
 
-            // Token: 0x0400A81C RID: 43036
+            // Token: 0x0400A91E RID: 43294
             public ComponentTypeHandle<Car> __Game_Vehicles_Car_RW_ComponentTypeHandle;
 
-            // Token: 0x0400A81D RID: 43037
+            // Token: 0x0400A91F RID: 43295
             public ComponentTypeHandle<CarCurrentLane> __Game_Vehicles_CarCurrentLane_RW_ComponentTypeHandle;
 
-            // Token: 0x0400A81E RID: 43038
+            // Token: 0x0400A920 RID: 43296
             public ComponentTypeHandle<Target> __Game_Common_Target_RW_ComponentTypeHandle;
 
-            // Token: 0x0400A81F RID: 43039
+            // Token: 0x0400A921 RID: 43297
             public ComponentTypeHandle<PathOwner> __Game_Pathfind_PathOwner_RW_ComponentTypeHandle;
 
-            // Token: 0x0400A820 RID: 43040
+            // Token: 0x0400A922 RID: 43298
             public BufferTypeHandle<CarNavigationLane> __Game_Vehicles_CarNavigationLane_RW_BufferTypeHandle;
 
-            // Token: 0x0400A821 RID: 43041
+            // Token: 0x0400A923 RID: 43299
             public BufferTypeHandle<ServiceDispatch> __Game_Simulation_ServiceDispatch_RW_BufferTypeHandle;
 
-            // Token: 0x0400A822 RID: 43042
+            // Token: 0x0400A924 RID: 43300
             [ReadOnly]
             public ComponentLookup<Owner> __Game_Common_Owner_RO_ComponentLookup;
 
-            // Token: 0x0400A823 RID: 43043
+            // Token: 0x0400A925 RID: 43301
             [ReadOnly]
             public ComponentLookup<PathInformation> __Game_Pathfind_PathInformation_RO_ComponentLookup;
 
-            // Token: 0x0400A824 RID: 43044
+            // Token: 0x0400A926 RID: 43302
             [ReadOnly]
             public ComponentLookup<Quantity> __Game_Objects_Quantity_RO_ComponentLookup;
 
-            // Token: 0x0400A825 RID: 43045
+            // Token: 0x0400A927 RID: 43303
             [ReadOnly]
             public ComponentLookup<EdgeLane> __Game_Net_EdgeLane_RO_ComponentLookup;
 
-            // Token: 0x0400A826 RID: 43046
+            // Token: 0x0400A928 RID: 43304
             [ReadOnly]
             public ComponentLookup<Game.Net.PedestrianLane> __Game_Net_PedestrianLane_RO_ComponentLookup;
 
-            // Token: 0x0400A827 RID: 43047
+            // Token: 0x0400A929 RID: 43305
             [ReadOnly]
             public ComponentLookup<Curve> __Game_Net_Curve_RO_ComponentLookup;
 
-            // Token: 0x0400A828 RID: 43048
+            // Token: 0x0400A92A RID: 43306
             [ReadOnly]
             public ComponentLookup<SlaveLane> __Game_Net_SlaveLane_RO_ComponentLookup;
 
-            // Token: 0x0400A829 RID: 43049
+            // Token: 0x0400A92B RID: 43307
             [ReadOnly]
             public ComponentLookup<CarData> __Game_Prefabs_CarData_RO_ComponentLookup;
 
-            // Token: 0x0400A82A RID: 43050
+            // Token: 0x0400A92C RID: 43308
             [ReadOnly]
             public ComponentLookup<GarbageTruckData> __Game_Prefabs_GarbageTruckData_RO_ComponentLookup;
 
-            // Token: 0x0400A82B RID: 43051
+            // Token: 0x0400A92D RID: 43309
             [ReadOnly]
             public ComponentLookup<PrefabRef> __Game_Prefabs_PrefabRef_RO_ComponentLookup;
 
-            // Token: 0x0400A82C RID: 43052
+            // Token: 0x0400A92E RID: 43310
             [ReadOnly]
             public ComponentLookup<SpawnableBuildingData> __Game_Prefabs_SpawnableBuildingData_RO_ComponentLookup;
 
-            // Token: 0x0400A82D RID: 43053
+            // Token: 0x0400A92F RID: 43311
             [ReadOnly]
             public ComponentLookup<ZoneData> __Game_Prefabs_ZoneData_RO_ComponentLookup;
 
-            // Token: 0x0400A82E RID: 43054
+            // Token: 0x0400A930 RID: 43312
             [ReadOnly]
             public ComponentLookup<GarbageCollectionRequest> __Game_Simulation_GarbageCollectionRequest_RO_ComponentLookup;
 
-            // Token: 0x0400A82F RID: 43055
+            // Token: 0x0400A931 RID: 43313
             [ReadOnly]
             public ComponentLookup<GarbageProducer> __Game_Buildings_GarbageProducer_RO_ComponentLookup;
 
-            // Token: 0x0400A830 RID: 43056
+            // Token: 0x0400A932 RID: 43314
             [ReadOnly]
             public ComponentLookup<Game.Buildings.GarbageFacility> __Game_Buildings_GarbageFacility_RO_ComponentLookup;
 
-            // Token: 0x0400A831 RID: 43057
+            // Token: 0x0400A933 RID: 43315
             [ReadOnly]
             public BufferLookup<ConnectedBuilding> __Game_Buildings_ConnectedBuilding_RO_BufferLookup;
 
-            // Token: 0x0400A832 RID: 43058
+            // Token: 0x0400A934 RID: 43316
             [ReadOnly]
             public BufferLookup<Game.Objects.SubObject> __Game_Objects_SubObject_RO_BufferLookup;
 
-            // Token: 0x0400A833 RID: 43059
+            // Token: 0x0400A935 RID: 43317
             [ReadOnly]
             public BufferLookup<Game.Net.SubLane> __Game_Net_SubLane_RO_BufferLookup;
 
-            // Token: 0x0400A834 RID: 43060
+            // Token: 0x0400A936 RID: 43318
             public BufferLookup<PathElement> __Game_Pathfind_PathElement_RW_BufferLookup;
 
-            // Token: 0x0400A835 RID: 43061
+            // Token: 0x0400A937 RID: 43319
             public ComponentLookup<Game.Vehicles.GarbageTruck> __Game_Vehicles_GarbageTruck_RW_ComponentLookup;
 
-            // Token: 0x0400A836 RID: 43062
+            // Token: 0x0400A938 RID: 43320
             public ComponentLookup<GarbageProducer> __Game_Buildings_GarbageProducer_RW_ComponentLookup;
 
-            // Token: 0x0400A837 RID: 43063
+            // Token: 0x0400A939 RID: 43321
             public BufferLookup<Game.Economy.Resources> __Game_Economy_Resources_RW_BufferLookup;
 
-            // Token: 0x0400A838 RID: 43064
+            // Token: 0x0400A93A RID: 43322
             public ComponentLookup<BuildingCondition> __Game_Buildings_BuildingCondition_RW_ComponentLookup;
 
-            // Token: 0x0400A839 RID: 43065
+            // Token: 0x0400A93B RID: 43323
             public BufferLookup<Efficiency> __Game_Buildings_Efficiency_RW_BufferLookup;
 
-            // Token: 0x0400A83A RID: 43066
+            // Token: 0x0400A93C RID: 43324
             [ReadOnly]
             public ComponentLookup<Game.Objects.OutsideConnection> __Game_Objects_OutsideConnection_RO_ComponentLookup;
         }

@@ -16,7 +16,7 @@ using BepInEx.Configuration;
 
 namespace RentControl
 {
-    [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, "1.0.6")]
+    [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, "1.1.0")]
     public class Plugin : BaseUnityPlugin
     {
         private void Awake()

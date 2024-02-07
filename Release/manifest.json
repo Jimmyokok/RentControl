@@ -1,6 +1,6 @@
 {
     "name": "RentControl",
-    "version_number": "1.0.6",
+    "version_number": "1.1.0",
     "website_url": "https://github.com/Jimmyokok/RentControl",
     "description": "Land Value, Rent & Building Upgrade Control",
     "dependencies": [
